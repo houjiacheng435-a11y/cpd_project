@@ -17,6 +17,7 @@ This repository contains a simple Python package for change point detection.
   - `TEST.parquet(1).gzip` - sample dataset
 - `example.py` - basic single-method example
 - `example_multi.py` - multi-method comparison with Jaccard heatmap
+- `example_market_state.ipynb` - local CSV market state vector example
 - `requirements.txt` - Python dependencies
 - `.gitignore` - files to ignore in Git
 
@@ -132,6 +133,60 @@ for cp in change_points:
 
 Call `Brk.detect(series)` to get a list of detected change point timestamps.
 
+### 2.1 Build an online market state vector
+
+The package also exposes a separate market-state layer that uses the existing
+change-point detectors as online prefix-confirmation signals:
+
+```python
+import numpy as np
+
+from cpd import (
+    load_data,
+    build_market_state_vector,
+    get_core_state_vector,
+    evaluate_state_vector,
+)
+
+# Put OHLC CSV files under data/ using the name {symbol}_{interval}.csv.
+# For example, data/spx_1d.csv can be loaded with symbol="spx", interval="1d".
+raw_df = load_data(symbol="spx", interval="1d")
+
+# builds the state vector on log OHLC prices.
+df = np.log(raw_df)
+
+# Full state vector for every timestamp in df.
+state_df = build_market_state_vector(data=df, detector_method="cusum", detector_q=1.0)
+
+# Compact 6-column core market state vector for every timestamp in state_df.
+core_state_df = get_core_state_vector(state_df)
+
+evaluation = evaluate_state_vector(state_df, price_is_log=True)
+```
+
+`state_df` includes the requested online features such as `direction`,
+`status`, `current_trend`, `position`, `distance_to_point2`,
+`distance_to_point3`, `time_since_last_cpd`, `regime_slope`, and
+`regime_volatility`. The `cpd_event` flag marks the bar on which a change
+point is first confirmed online.
+
+`core_state_df` keeps the same index as `state_df` and returns the core market
+state variables for all available timestamps:
+
+```python
+[
+    "current_trend",
+    "current_phase",
+    "position",
+    "regime_slope",
+    "regime_volatility",
+    "dist_point3_pct",
+]
+```
+
+`dist_point3_pct` is computed as `distance_to_point3 / Close`; missing values,
+zero `Close`, and infinite results are returned as `NaN`.
+
 ## Visualization
 
 ### Plot change points on time series
@@ -189,3 +244,12 @@ python example_multi.py
 ```
 
 This loads data, runs multiple detection methods, prints results, and shows a Jaccard heatmap.
+
+**Market state vector example:**
+
+```bash
+jupyter notebook example_market_state.ipynb
+```
+
+This loads local OHLC data from `data/spx_1d.csv`, builds the online market
+state vector, and prints evaluation summaries.
