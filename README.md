@@ -162,13 +162,23 @@ state_df = build_market_state_vector(data=df, detector_method="cusum", detector_
 core_state_df = get_core_state_vector(state_df)
 
 evaluation = evaluate_state_vector(state_df, price_is_log=True)
+
+# Future-return separation grouped by phase.
+evaluation["phase_future_returns"][5]
+
+# Phase persistence and transition checks.
+evaluation["phase_duration_summary"]
+evaluation["phase_transition_matrix"]
+
+# Simple bar-distance statistics between each unique point2 and point3 pair.
+evaluation["point23_interval_summary"]
 ```
 
 `state_df` includes the requested online features such as `direction`,
 `status`, `current_trend`, `position`, `distance_to_point2`,
-`distance_to_point3`, `time_since_last_cpd`, `regime_slope`, and
-`regime_volatility`. The `cpd_event` flag marks the bar on which a change
-point is first confirmed online.
+`distance_to_point3`, `time_since_last_cpd`, and `regime_volatility`. The
+`cpd_confirm_event` flag marks the bar on which a change point is first
+confirmed online.
 
 `core_state_df` keeps the same index as `state_df` and returns the core market
 state variables for all available timestamps:
@@ -178,14 +188,14 @@ state variables for all available timestamps:
     "current_trend",
     "current_phase",
     "position",
-    "regime_slope",
     "regime_volatility",
+    "dist_point2_pct",
     "dist_point3_pct",
 ]
 ```
 
-`dist_point3_pct` is computed as `distance_to_point3 / Close`; missing values,
-zero `Close`, and infinite results are returned as `NaN`.
+`dist_point2_pct` and `dist_point3_pct` are computed relative to `Close`;
+missing values, zero `Close`, and infinite results are returned as `NaN`.
 
 ## Visualization
 

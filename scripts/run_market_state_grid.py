@@ -119,7 +119,10 @@ def _write_evaluation(evaluation: dict[str, Any], output_dir: Path) -> None:
 
     evaluation["state_duration_table"].to_csv(eval_dir / "state_duration_table.csv", index=False)
     evaluation["state_duration_summary"].to_csv(eval_dir / "state_duration_summary.csv")
+    evaluation["phase_duration_table"].to_csv(eval_dir / "phase_duration_table.csv", index=False)
+    evaluation["phase_duration_summary"].to_csv(eval_dir / "phase_duration_summary.csv")
     evaluation["transition_matrix"].to_csv(eval_dir / "transition_matrix.csv")
+    evaluation["phase_transition_matrix"].to_csv(eval_dir / "phase_transition_matrix.csv")
     _write_json(eval_dir / "switch_counts.json", evaluation["switch_counts"])
 
     position_dir = eval_dir / "position_future_returns"
@@ -131,6 +134,14 @@ def _write_evaluation(evaluation: dict[str, Any], output_dir: Path) -> None:
     trend_dir.mkdir(exist_ok=True)
     for horizon, table in evaluation["trend_future_returns"].items():
         table.to_csv(trend_dir / f"horizon_{horizon}.csv")
+
+    phase_dir = eval_dir / "phase_future_returns"
+    phase_dir.mkdir(exist_ok=True)
+    for horizon, table in evaluation["phase_future_returns"].items():
+        table.to_csv(phase_dir / f"horizon_{horizon}.csv")
+
+    evaluation["point23_interval_table"].to_csv(eval_dir / "point23_interval_table.csv", index=False)
+    evaluation["point23_interval_summary"].to_csv(eval_dir / "point23_interval_summary.csv")
 
 
 def _run_combo_worker(method: str, target_label: str, q: float, combo_dir_str: str) -> None:
@@ -155,7 +166,9 @@ def _run_combo_worker(method: str, target_label: str, q: float, combo_dir_str: s
     result = {
         "rows": int(len(core_df)),
         "core_columns": list(core_df.columns),
-        "cpd_event_count": int(state_df.get("cpd_event", pd.Series(False, index=state_df.index)).sum()),
+        "cpd_confirm_event_count": int(
+            state_df.get("cpd_confirm_event", pd.Series(False, index=state_df.index)).sum()
+        ),
         "position_notna_count": int(core_df["position"].notna().sum()),
     }
     _write_json(combo_dir / "result_summary.json", result)
