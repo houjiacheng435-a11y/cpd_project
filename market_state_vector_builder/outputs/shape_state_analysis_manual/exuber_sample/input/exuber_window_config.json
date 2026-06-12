@@ -1,0 +1,22 @@
+{
+  "final_state_path": "market_state_vector_builder\\outputs\\shape_state_analysis_manual\\final_state_vector.parquet",
+  "out_dir": "market_state_vector_builder\\outputs\\shape_state_analysis_manual\\exuber_sample\\input",
+  "state_columns": [
+    "range_pct",
+    "expansion",
+    "structure_dir",
+    "range_pos",
+    "upper_break",
+    "lower_break",
+    "move_age",
+    "extrema_freq",
+    "speed_imbalance",
+    "speed_level"
+  ],
+  "window": 60,
+  "min_obs": 50,
+  "samples_per_group": 40,
+  "samples_per_state": 50,
+  "random_state": 42,
+  "close_is_log": true
+}

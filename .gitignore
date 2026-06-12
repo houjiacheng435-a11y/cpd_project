@@ -8,3 +8,5 @@ env/
 venv/
 *.egg-info/
 .DS_Store
+
+trash/

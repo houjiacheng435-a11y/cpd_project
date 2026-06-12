@@ -1,0 +1,11 @@
+﻿variable,score_column,method,window,min_periods,lower_quantile,upper_quantile
+range_pct,range_pct_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+expansion,expansion_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+structure_dir,structure_dir_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+range_pos,range_pos_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+upper_break,upper_break_score,binary_fixed,,,,
+lower_break,lower_break_score,binary_fixed,,,,
+move_age,move_age_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+extrema_freq,extrema_freq_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+speed_imbalance,speed_imbalance_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95
+speed_level,speed_level_score,rolling_prior_quantile,1000.0,100.0,0.05,0.95

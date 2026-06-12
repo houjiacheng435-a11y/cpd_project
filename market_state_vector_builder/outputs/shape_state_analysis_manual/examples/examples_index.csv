@@ -1,0 +1,11 @@
+﻿stock_id,date,close,output,unmatched_levels
+000100,2011-03-28,1.5040773967762742,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_01_000100_20110328.png,
+000017,2022-04-20,1.1568811967920856,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_02_000017_20220420.png,
+000026,2011-05-13,2.5937610547000824,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_03_000026_20110513.png,
+000420,2017-03-31,1.3787660946990992,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_04_000420_20170331.png,
+000025,2012-01-19,1.7351891177396608,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_05_000025_20120119.png,
+000151,2024-09-19,2.347558458636777,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_06_000151_20240919.png,
+000066,2017-01-03,2.5249283241374862,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_07_000066_20170103.png,
+000158,2019-10-11,1.747459210331475,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_08_000158_20191011.png,
+000042,2023-07-28,2.1114245875328868,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_09_000042_20230728.png,
+000042,2023-05-30,2.0268315914075385,market_state_vector_builder\outputs\shape_state_analysis_manual\examples\example_10_000042_20230530.png,

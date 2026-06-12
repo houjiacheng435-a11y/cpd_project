@@ -1,0 +1,12 @@
+{
+  "final_state_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/final_state_vector.parquet",
+  "state_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/shape_state_variables.parquet",
+  "symbol_dir": "data/a_share_1d_akshare/symbols",
+  "out_dir": "market_state_vector_builder/outputs/shape_state_analysis_manual/examples",
+  "n_examples": 10,
+  "lookback": 90,
+  "lookahead": 20,
+  "match_lookback": 260,
+  "random_state": 42,
+  "state_price_is_log": true
+}

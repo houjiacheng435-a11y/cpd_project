@@ -133,69 +133,143 @@ for cp in change_points:
 
 Call `Brk.detect(series)` to get a list of detected change point timestamps.
 
-### 2.1 Build an online market state vector
+### 2.1 Market state vector builder
 
-The package also exposes a separate market-state layer that uses the existing
-change-point detectors as online prefix-confirmation signals:
+The current main workflow builds a manual, interpretable market-state vector. PCA is not used as the final state representation. The core goal is:
 
-```python
-import numpy as np
-
-from cpd import (
-    load_data,
-    build_market_state_vector,
-    get_core_state_vector,
-    evaluate_state_vector,
-)
-
-# Put OHLC CSV files under data/ using the name {symbol}_{interval}.csv.
-# For example, data/spx_1d.csv can be loaded with symbol="spx", interval="1d".
-raw_df = load_data(symbol="spx", interval="1d")
-
-# builds the state vector on log OHLC prices.
-df = np.log(raw_df)
-
-# Full state vector for every timestamp in df.
-state_df = build_market_state_vector(data=df, detector_method="cusum", detector_q=1.0)
-
-# Compact 6-column core market state vector for every timestamp in state_df.
-core_state_df = get_core_state_vector(state_df)
-
-evaluation = evaluate_state_vector(state_df, price_is_log=True)
-
-# Future-return separation grouped by phase.
-evaluation["phase_future_returns"][5]
-
-# Phase persistence and transition checks.
-evaluation["phase_duration_summary"]
-evaluation["phase_transition_matrix"]
-
-# Simple bar-distance statistics between each unique point2 and point3 pair.
-evaluation["point23_interval_summary"]
+```text
+raw daily OHLCV data -> final_state_vector.parquet
 ```
 
-`state_df` includes the requested online features such as `direction`,
-`status`, `current_trend`, `position`, `distance_to_point2`,
-`distance_to_point3`, `time_since_last_cpd`, and `regime_volatility`. The
-`cpd_confirm_event` flag marks the bar on which a change point is first
-confirmed online.
+Here, "realtime" means that the state for a given date does not use data after that date. In practice, you can pass the full history available up to the current date and run the script once. The CPD confirmation, structural window construction, and rolling scores are all computed with an online data convention.
 
-`core_state_df` keeps the same index as `state_df` and returns the core market
-state variables for all available timestamps:
+**Input data**
 
-```python
-[
-    "current_trend",
-    "current_phase",
-    "position",
-    "regime_volatility",
-    "dist_point2_pct",
-    "dist_point3_pct",
-]
+Put one CSV file per stock under an input directory, for example:
+
+```text
+data/a_share_1d_akshare/symbols/
 ```
 
-`dist_point2_pct` and `dist_point3_pct` are computed relative to `Close`;
-missing values, zero `Close`, and infinite results are returned as `NaN`.
+Each CSV should contain daily OHLC data. The current workflow uses log price from the CPD stage onward, so keep `--log-price` enabled for the main run.
+
+**Core command**
+
+```bash
+python market_state_vector_builder/02_build_state/build_manual_state.py ^
+  --input-dir data/a_share_1d_akshare/symbols ^
+  --out-dir market_state_vector_builder/outputs/shape_state_analysis_manual ^
+  --max-symbols 80 ^
+  --start 2010-01-01 ^
+  --end 2026-05-29 ^
+  --log-price ^
+  --detector-method cusum ^
+  --detector-q 1.0 ^
+  --cpd-confirm-lag 0 ^
+  --n-lags 0 ^
+  --score-window 1000 ^
+  --score-min-periods 100
+```
+
+The only core output needed for downstream use is:
+
+```text
+market_state_vector_builder/outputs/shape_state_analysis_manual/final_state_vector.parquet
+```
+
+Other files, such as `shape_state_variables.parquet`, `manual_state_summary.csv`, `manual_state_correlation.csv`, `manual_state_score_config.csv`, and `manual_state_correlation_heatmap.png`, are intermediate files, documentation outputs, or diagnostic checks. They are not the final state vector itself.
+
+`shape_state_variables.parquet` is the main intermediate table. It keeps the online CPD diagnostics and the structural-window variables before the final manual state table is trimmed down. With `--log-price`, the OHLC and structural price-level columns are in log-price space.
+
+| Column | Meaning |
+|---|---|
+| `stock_id` | Six-digit stock identifier. |
+| `date` | Bar date. |
+| `open` | Open price used by the state builder; log open when `--log-price` is enabled. |
+| `high` | High price used by the state builder; log high when `--log-price` is enabled. |
+| `low` | Low price used by the state builder; log low when `--log-price` is enabled. |
+| `close` | Close price used by the state builder; log close when `--log-price` is enabled. |
+| `num_confirmed_extrema` | Number of online-confirmed extrema accumulated up to this bar. |
+| `has_structural_window` | Whether at least four alternating confirmed extrema are available. |
+| `volume` | Raw trading volume from the input file, if available. |
+| `amount` | Raw traded amount from the input file, if available. |
+| `starts_high` | `1` if the latest four-extremum window starts with a high, otherwise `0`. |
+| `high1` | Earlier high in the latest four-extremum window. |
+| `high2` | Later high in the latest four-extremum window. |
+| `low1` | Earlier low in the latest four-extremum window. |
+| `low2` | Later low in the latest four-extremum window. |
+| `high_change` | Change from `high1` to `high2`. |
+| `low_change` | Change from `low1` to `low2`. |
+| `expansion` | Width change: `high_change - low_change`. |
+| `range_pos` | Current close position inside the static high-low structural range. |
+| `upper_break` | `1` if close is above the dynamic upper line, otherwise `0`. |
+| `lower_break` | `1` if close is below the dynamic lower line, otherwise `0`. |
+| `structure_dir` | Structural direction: `high_change + low_change`. |
+| `range_pct` | Static structural width: `max(high1, high2) - min(low1, low2)`. |
+| `last_width_pct` | Width between the later high and later low: `high2 - low2`. |
+| `move_age` | Bars since the latest structural-window endpoint, scaled by recent median extremum gap. |
+| `high_speed` | Absolute high-point change per bar between `high1` and `high2`. |
+| `low_speed` | Absolute low-point change per bar between `low1` and `low2`. |
+| `extrema_freq` | Confirmed-extrema frequency inside the window: `4 / window_bars`. |
+| `direction` | Online direction signal from `MarketStateVector`. |
+| `excep` | Online exception flag from `MarketStateVector`. |
+| `status` | Online status label from `MarketStateVector`. |
+| `current_trend` | Current trend label from `MarketStateVector`. |
+| `current_trend_code` | Numeric current-trend code from `MarketStateVector`. |
+| `current_phase` | Current phase label from `MarketStateVector`. |
+| `trend_candidate` | Current trend-candidate label from `MarketStateVector`. |
+| `new_extremum_confirmed` | Whether this bar confirms a new extremum. |
+| `confirmed_extremum_kind` | Confirmed extremum type: `high` or `low`. |
+| `confirmed_extremum_idx` | Original bar index of the confirmed extremum. |
+| `confirmed_extremum_value` | Price value of the confirmed extremum. |
+| `cpd_confirm_event` | Whether a CPD event is confirmed on this bar. |
+| `time_since_last_cpd` | Bars since the last raw CPD event. |
+| `time_since_last_cpd_confirm` | Bars since the last confirmed CPD event. |
+
+If `shape_state_variables.parquet` already exists and you only want to regenerate the final state vector and scores, reuse it without rerunning CPD:
+
+```bash
+python market_state_vector_builder/02_build_state/build_manual_state.py ^
+  --state-path market_state_vector_builder/outputs/shape_state_analysis_manual/shape_state_variables.parquet ^
+  --out-dir market_state_vector_builder/outputs/shape_state_analysis_manual ^
+  --log-price ^
+  --score-window 1000 ^
+  --score-min-periods 100
+```
+
+**What is inside final_state_vector.parquet**
+
+The final table contains one row per stock-date state. The main variables are:
+
+| Variable | Meaning |
+|---|---|
+| `range_pct` | Structural log-width: `log(upper_ref) - log(lower_ref)`. |
+| `expansion` | Width change: `high_change - low_change`; positive means expansion, negative means contraction. |
+| `structure_dir` | Continuous structural direction: `high_change + low_change`; positive means highs and lows move up overall. |
+| `range_pos` | Current price position inside the static structural range. |
+| `upper_break` | `1` if the current price is above the dynamic upper line, otherwise `0`. |
+| `lower_break` | `1` if the current price is below the dynamic lower line, otherwise `0`. |
+| `move_age` | Time since the latest structural-window endpoint, scaled by the recent median extremum gap. |
+| `extrema_freq` | Confirmed-extrema frequency inside the structural window: `4 / window_bars`. |
+| `speed_imbalance` | Upper/lower boundary speed imbalance: `high_speed - low_speed`. |
+| `speed_level` | Overall boundary speed level: `high_speed + low_speed`. |
+
+Each variable also has a matching `*_score` column. For continuous variables, the score uses each stock's prior 1000 valid states to estimate rolling 5%/95% quantiles, then maps the current value to `[-1, 1]`. The current row is excluded from its own quantile estimate, so the score does not use future data. `upper_break_score` and `lower_break_score` use a fixed binary mapping: `0 -> -1`, `1 -> 1`.
+
+**Optional visual check**
+
+After generating the final state vector, you can plot a few K-line examples to inspect structural extrema and state values manually:
+
+```bash
+python market_state_vector_builder/03_examples/plot_examples.py ^
+  --final-state-path market_state_vector_builder/outputs/shape_state_analysis_manual/final_state_vector.parquet ^
+  --state-path market_state_vector_builder/outputs/shape_state_analysis_manual/shape_state_variables.parquet ^
+  --out-dir market_state_vector_builder/outputs/shape_state_analysis_manual/examples ^
+  --n-examples 10 ^
+  --state-price-is-log
+```
+
+ADF and explosive tests are downstream research checks. They are not required to generate the realtime state vector.
 
 ## Visualization
 

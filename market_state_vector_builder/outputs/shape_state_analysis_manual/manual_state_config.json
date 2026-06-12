@@ -1,0 +1,32 @@
+{
+  "input_dir": "data/a_share_1d_akshare/symbols",
+  "state_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/shape_state_variables.parquet",
+  "out_dir": "market_state_vector_builder/outputs/shape_state_analysis_manual",
+  "max_symbols": 80,
+  "start": "2010-01-01",
+  "end": "2026-05-29",
+  "log_price": true,
+  "detector_method": "cusum",
+  "detector_q": 1.0,
+  "cpd_confirm_lag": 0,
+  "n_lags": 0,
+  "clip_lower": 0.01,
+  "clip_upper": 0.99,
+  "score_window": 1000,
+  "score_min_periods": 100,
+  "score_lower": 0.05,
+  "score_upper": 0.95,
+  "method": "manual_market_state_vector_without_pca",
+  "state_columns": [
+    "range_pct",
+    "expansion",
+    "structure_dir",
+    "range_pos",
+    "upper_break",
+    "lower_break",
+    "move_age",
+    "extrema_freq",
+    "speed_imbalance",
+    "speed_level"
+  ]
+}

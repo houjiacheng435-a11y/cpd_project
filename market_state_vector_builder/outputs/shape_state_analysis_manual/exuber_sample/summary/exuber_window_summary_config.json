@@ -1,0 +1,5 @@
+{
+  "metadata_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/exuber_sample/input/exuber_window_metadata.csv",
+  "result_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/exuber_sample/raw_r_results/exuber_window_results.csv",
+  "out_dir": "market_state_vector_builder/outputs/shape_state_analysis_manual/exuber_sample/summary"
+}
