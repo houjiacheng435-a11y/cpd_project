@@ -1,0 +1,9 @@
+﻿x_column,y_column,n,fit_n,output,x_min,x_max,y_min,y_max,variable,target_name
+range_pct_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\01_range_pct_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,range_pct_score,return_k05
+expansion_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\02_expansion_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,expansion_score,return_k05
+structure_dir_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\03_structure_dir_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,structure_dir_score,return_k05
+range_pos_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\04_range_pos_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,range_pos_score,return_k05
+move_age_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\05_move_age_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,move_age_score,return_k05
+extrema_freq_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\06_extrema_freq_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,extrema_freq_score,return_k05
+speed_imbalance_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\07_speed_imbalance_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,speed_imbalance_score,return_k05
+speed_level_score,future_return_k05,289498,8000,market_state_vector_builder\outputs\shape_state_analysis_manual\06_lowess\return_k05\08_speed_level_score.png,-1.0,1.0,-0.18398919768947164,0.195850964175717,speed_level_score,return_k05

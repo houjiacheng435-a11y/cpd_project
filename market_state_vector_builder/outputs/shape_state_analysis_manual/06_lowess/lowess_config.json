@@ -1,0 +1,34 @@
+{
+  "final_state_path": "market_state_vector_builder/outputs/shape_state_analysis_manual/final_state_vector.parquet",
+  "out_dir": "market_state_vector_builder/outputs/shape_state_analysis_manual/06_lowess",
+  "state_columns": [
+    "range_pct",
+    "expansion",
+    "structure_dir",
+    "range_pos",
+    "upper_break",
+    "lower_break",
+    "move_age",
+    "extrema_freq",
+    "speed_imbalance",
+    "speed_level"
+  ],
+  "use_scores": true,
+  "return_horizons": [
+    5,
+    10,
+    20
+  ],
+  "vol_horizons": [
+    5,
+    10,
+    20
+  ],
+  "frac": 0.25,
+  "it": 1,
+  "max_points": 8000,
+  "scatter_max_points": 8000,
+  "target_clip_lower": 0.01,
+  "target_clip_upper": 0.99,
+  "random_state": 42
+}

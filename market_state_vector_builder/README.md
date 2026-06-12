@@ -44,3 +44,7 @@ Main output variables:
 - `export_manual_exuber_windows.py`: sample windows for R `exuber`.
 - `run_exuber_window_sample.R`: run GSADF/BSADF window tests in R.
 - `analyze_manual_exuber_results.py`: summarize explosive-test results by manual-state quantile and composite state.
+
+## 06_lowess
+
+- `analyze_manual_lowess.py`: LOWESS smoothing of each manual variable against future log-return and future volatility targets.
