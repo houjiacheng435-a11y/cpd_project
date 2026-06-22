@@ -1,0 +1,12 @@
+{
+  "input_csv": "data/a_share_1d_akshare/symbols/000001.csv",
+  "out_root": "Hankel_DMD/outputs/runs",
+  "run_name": "example_000001_cpd_extrema",
+  "start": "2020-01-01",
+  "end": "2026-05-29",
+  "log_price": true,
+  "detector_method": "cusum",
+  "detector_q": 1.0,
+  "cpd_confirm_lag": 0,
+  "reset_structure_on_cpd": false
+}

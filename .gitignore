@@ -10,3 +10,5 @@ venv/
 .DS_Store
 
 trash/
+Hankel_DMD/outputs/
+market-state-vector-builder.pptx
