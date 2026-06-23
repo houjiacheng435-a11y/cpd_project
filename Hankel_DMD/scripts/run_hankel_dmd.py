@@ -22,7 +22,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="对 observable.csv 执行 Hankel-DMD 并保存结果。")
     parser.add_argument("--run-dir", required=True, help="包含 observable.csv 的 run 目录。")
     parser.add_argument("--observable-file", default="observable.csv")
-    parser.add_argument("--out-dir", default=None, help="输出目录；默认写到 run-dir/hankel_dmd。")
+    parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="输出目录；默认写到 run-dir/hankel_dmd_m{m}_n{n}_r{rank}。",
+    )
     parser.add_argument("--m", type=int, required=True, help="Hankel 矩阵行数。")
     parser.add_argument("--n", type=int, required=True, help="Hankel 矩阵列数减一，实际列数为 n+1。")
     parser.add_argument("--rank", type=int, required=True, help="SVD 截断 rank。")
@@ -45,6 +49,13 @@ def _complex_frame(values: np.ndarray, prefix: str) -> pd.DataFrame:
     )
 
 
+def _tail_hankel_window(x: np.ndarray, *, m: int, n: int) -> np.ndarray:
+    required = m + n + 1
+    if required > x.size:
+        raise ValueError(f"样本不足：m+n+1={required}，但 observable 只有 {x.size} 个点")
+    return x[-required:]
+
+
 def main() -> None:
     args = parse_args()
     run_dir = Path(args.run_dir)
@@ -52,16 +63,21 @@ def main() -> None:
     if not observable_path.is_file():
         raise FileNotFoundError(f"找不到 observable 文件: {observable_path}")
 
-    out_dir = Path(args.out_dir) if args.out_dir else run_dir / "hankel_dmd"
+    default_out_name = f"hankel_dmd_m{args.m}_n{args.n}_r{args.rank}"
+    out_dir = Path(args.out_dir) if args.out_dir else run_dir / default_out_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
     observable = pd.read_csv(observable_path)
     if "observable" not in observable.columns:
         raise ValueError(f"{observable_path} 缺少 observable 列")
+    sort_cols = [col for col in ["date", "bar_index", "event_id"] if col in observable.columns]
+    if sort_cols:
+        observable = observable.sort_values(sort_cols).reset_index(drop=True)
     x = pd.to_numeric(observable["observable"], errors="coerce").to_numpy(float)
+    x_used = _tail_hankel_window(x, m=args.m, n=args.n)
 
     result = fit_hankel_dmd(
-        x,
+        x_used,
         m=args.m,
         n=args.n,
         rank=args.rank,
@@ -101,6 +117,9 @@ def main() -> None:
             "m": args.m,
             "n": args.n,
             "rank": result.rank,
+            "total_observable_count": int(x.size),
+            "used_observable_count": int(x_used.size),
+            "used_window": "tail_m_plus_n_plus_1",
             "save_matrices": bool(args.save_matrices),
             "outputs": {
                 "eigenvalues": "eigenvalues.csv",

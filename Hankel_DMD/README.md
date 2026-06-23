@@ -26,6 +26,32 @@ Hankel_DMD/
 Hankel_DMD/scripts/build_cpd_extrema.py
 ```
 
+如果需要先下载 A 股 60 分钟数据，入口脚本：
+
+```text
+Hankel_DMD/scripts/download_a_share_60min_akshare.py
+```
+
+示例命令：
+
+```powershell
+python Hankel_DMD/scripts/download_a_share_60min_akshare.py `
+  --source sina `
+  --symbols 000001,000002,000006,000008,000009 `
+  --start "2020-01-01 09:30:00" `
+  --end "2026-05-29 15:00:00" `
+  --out-dir data/a_share_60min_akshare
+```
+
+输出：
+
+| 文件 | 用途 |
+|---|---|
+| `data/a_share_60min_akshare/symbols/<symbol>.csv` | 单只股票 60 分钟 OHLC 数据 |
+
+说明：`source=sina` 通常返回最近约 1970 根 60 分钟 K 线；`source=eastmoney` 在当前接口下通常只返回更短的近期窗口。
+下载完成后，脚本只在终端打印下载状态和共同小时 bar 日历下的完整性检查，不额外生成汇总 CSV。
+
 示例命令：
 
 ```powershell
@@ -163,7 +189,19 @@ python Hankel_DMD/scripts/run_hankel_dmd.py `
 默认输出目录：
 
 ```text
-Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd/
+Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5/
+```
+
+输出目录会自动带上参数名，格式为：
+
+```text
+hankel_dmd_m{m}_n{n}_r{rank}/
+```
+
+例如 `--m 10 --n 80 --rank 10` 会写到：
+
+```text
+Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m10_n80_r10/
 ```
 
 该目录会生成：
@@ -194,25 +232,24 @@ Hankel_DMD/diagnostics.py
 
 ```powershell
 python Hankel_DMD/diagnostics.py `
-  --dmd-dir Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd
+  --dmd-dir Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5
 ```
 
-如果还要计算一步映射误差和样本长度稳定性，需要提供 `observable.csv` 和本次 DMD 参数：
+如果还要计算滚动窗口外下一个 observable 点的预测误差，需要提供 `observable.csv` 和本次 DMD 参数：
 
 ```powershell
 python Hankel_DMD/diagnostics.py `
-  --dmd-dir Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd `
+  --dmd-dir Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5 `
   --observable-path Hankel_DMD/outputs/runs/example_000001_cpd_extrema/observable.csv `
   --m 20 `
   --n 80 `
-  --rank 5 `
-  --sample-sizes 101,120,147
+  --rank 5
 ```
 
 默认输出目录：
 
 ```text
-Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd/diagnostics/
+Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5/diagnostics/
 ```
 
 可能生成：
@@ -221,5 +258,42 @@ Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd/diagnostics/
 |---|---|
 | `singular_value_diagnostics.csv` | 奇异值、归一化奇异值、能量占比和累计能量 |
 | `eigenvalue_diagnostics.csv` | 特征值实部、虚部、模长和相位角 |
-| `reconstruction_error.csv` | 相对一步映射误差 |
-| `sample_size_stability.csv` | 不同末端样本长度下的 leading eigenvalues |
+| `reconstruction_error.csv` | 窗口外下一个 observable 点的 MAE、RMSE、中位绝对误差、midpoint 相对绝对误差和最后一个预测误差 |
+
+## 5. PyDMD HankelDMD 对照
+
+入口脚本：
+
+```text
+Hankel_DMD/scripts/run_pydmd_hankel_grid.py
+```
+
+如果本地没有 PyDMD，先安装：
+
+```powershell
+python -m pip install pydmd
+```
+
+示例命令：
+
+```powershell
+python Hankel_DMD/scripts/run_pydmd_hankel_grid.py `
+  --run-dir Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema `
+  --rank 5 `
+  --local-grid-path Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema/parameter_grid_tail_r5/grid_summary.csv
+```
+
+默认输出目录：
+
+```text
+Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema/pydmd_hankel_grid_r5/
+```
+
+可能生成：
+
+| 文件 | 含义 |
+|---|---|
+| `pydmd_grid_summary.csv` | PyDMD HankelDMD 参数网格预测误差 |
+| `pydmd_grid_leading_eigenvalues.csv` | PyDMD HankelDMD leading eigenvalues |
+| `comparison_with_local.csv` | PyDMD 与本项目实现的误差指标对比 |
+| `eigenvalue_comparison_with_local.csv` | PyDMD 与本项目实现的 leading eigenvalues 对比 |

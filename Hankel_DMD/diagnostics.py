@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -64,67 +64,80 @@ def eigenvalue_diagnostics(eigenvalues: Iterable[complex]) -> pd.DataFrame:
     )
 
 
-def reconstruction_error(x: Iterable[float], *, m: int, n: int, rank: int) -> float:
-    """重新拟合 Hankel-DMD，并计算相对一步映射误差。"""
+def _validate_window_length(x: np.ndarray, *, m: int, n: int) -> int:
+    required = m + n + 1
+    if required > x.size:
+        raise ValueError(f"样本不足：m+n+1={required}，但 observable 只有 {x.size} 个点")
+    return required
 
-    result = fit_hankel_dmd(np.asarray(list(x), dtype=float), m=m, n=n, rank=rank, return_matrices=True)
+
+def _predict_next_value_after_window(x: np.ndarray, *, m: int, n: int, rank: int) -> float:
+    result = fit_hankel_dmd(x, m=m, n=n, rank=rank, return_matrices=True)
     if result.X is None or result.Y is None or result.A_hat is None:
-        raise ValueError("缺少 X/Y/A_hat，无法计算重构误差")
+        raise ValueError("缺少 X/Y/A_hat，无法计算新增点预测误差")
 
     W, _, _ = np.linalg.svd(result.X, full_matrices=False)
     W_r = W[:, : result.rank]
-    y_pred = W_r @ result.A_hat @ W_r.conj().T @ result.X
-    denom = np.linalg.norm(result.Y, ord="fro")
-    if denom <= 0:
-        raise ValueError("Y 的 Frobenius 范数为 0，无法计算相对误差")
-    return float(np.linalg.norm(result.Y - y_pred, ord="fro") / denom)
+    a_full = W_r @ result.A_hat @ W_r.conj().T
+    last_known_window = result.Y[:, -1]
+    next_window_pred = a_full @ last_known_window
+    return float(np.real(next_window_pred[-1]))
 
 
-def sample_size_stability(
-    x: Iterable[float],
-    *,
-    sample_sizes: Iterable[int],
-    m: int,
-    n: int,
-    rank: int,
-    leading_count: int = 5,
-) -> pd.DataFrame:
-    """用不同末端样本长度重复拟合，记录 leading eigenvalues。"""
+def reconstruction_errors(x: Iterable[float], *, m: int, n: int, rank: int) -> dict[str, float]:
+    """滚动拟合 Hankel-DMD，并计算窗口外下一个 observable 点的预测误差。
+
+    对每个长度为 ``m+n+1`` 的滚动窗口重新拟合一次 DMD，然后用该窗口内
+    最后一个已知 delay 窗口预测下一个 delay 窗口。只取预测窗口最后一个
+    分量，和窗口外真实的下一个 observable 标量比较。
+    """
 
     arr = np.asarray(list(x), dtype=float)
-    if arr.ndim != 1 or arr.size == 0:
-        raise ValueError("x 必须是一维非空序列")
-    if not np.isfinite(arr).all():
-        raise ValueError("x 不能包含 NaN 或 inf")
+    required = _validate_window_length(arr, m=m, n=n)
+    if required >= arr.size:
+        raise ValueError(f"样本不足：m+n+1={required} 时还需要至少 1 个窗口外真实点")
 
-    rows: list[dict[str, Any]] = []
-    for N in sample_sizes:
-        N = int(N)
-        if N <= 0 or N > arr.size:
-            raise ValueError(f"非法样本长度 N={N}，有效范围为 1 到 {arr.size}")
-        if m + n + 1 > N:
-            raise ValueError(f"N={N} 样本不足：要求 m+n+1={m+n+1}")
+    true_values: list[float] = []
+    pred_values: list[float] = []
+    errors: list[float] = []
 
-        part = arr[-N:]
-        result = fit_hankel_dmd(part, m=m, n=n, rank=rank)
-        diag = eigenvalue_diagnostics(result.eigenvalues)
-        diag = diag.sort_values("lambda_abs", ascending=False).head(leading_count)
-        for lead_id, row in enumerate(diag.itertuples(index=False), start=1):
-            rows.append(
-                {
-                    "N": N,
-                    "m": m,
-                    "n": n,
-                    "rank": result.rank,
-                    "leading_id": lead_id,
-                    "mode_id": int(row.mode_id),
-                    "lambda_real": float(row.lambda_real),
-                    "lambda_imag": float(row.lambda_imag),
-                    "lambda_abs": float(row.lambda_abs),
-                    "lambda_angle": float(row.lambda_angle),
-                }
-            )
-    return pd.DataFrame(rows)
+    for start in range(arr.size - required):
+        window = arr[start : start + required]
+        pred = _predict_next_value_after_window(window, m=m, n=n, rank=rank)
+        true = float(arr[start + required])
+        true_values.append(true)
+        pred_values.append(pred)
+        errors.append(pred - true)
+
+    true_arr = np.asarray(true_values, dtype=float)
+    pred_arr = np.asarray(pred_values, dtype=float)
+    error_arr = np.asarray(errors, dtype=float)
+    abs_error = np.abs(error_arr)
+    midpoint = np.abs((pred_arr + true_arr) / 2.0)
+    midpoint_relative_abs_error = np.full_like(abs_error, np.nan, dtype=float)
+    valid_midpoint = midpoint > np.finfo(float).eps
+    midpoint_relative_abs_error[valid_midpoint] = abs_error[valid_midpoint] / midpoint[valid_midpoint]
+
+    return {
+        "prediction_count": int(error_arr.size),
+        "prediction_error_mean": float(np.mean(error_arr)),
+        "prediction_error_std": float(np.std(error_arr, ddof=0)),
+        "prediction_mae": float(np.mean(abs_error)),
+        "prediction_rmse": float(np.sqrt(np.mean(error_arr**2))),
+        "prediction_median_absolute_error": float(np.median(abs_error)),
+        "midpoint_relative_abs_error_mean": float(np.nanmean(midpoint_relative_abs_error)),
+        "midpoint_relative_abs_error_median": float(np.nanmedian(midpoint_relative_abs_error)),
+        "midpoint_relative_abs_error_valid_count": int(np.sum(valid_midpoint)),
+        "last_prediction_true": float(true_arr[-1]),
+        "last_prediction_pred": float(pred_arr[-1]),
+        "last_prediction_error": float(error_arr[-1]),
+    }
+
+
+def reconstruction_error(x: Iterable[float], *, m: int, n: int, rank: int) -> float:
+    """兼容旧接口：返回窗口外下一个 observable 点的 RMSE。"""
+
+    return reconstruction_errors(x, m=m, n=n, rank=rank)["prediction_rmse"]
 
 
 def _read_eigenvalues(path: Path) -> np.ndarray:
@@ -158,7 +171,6 @@ def run_diagnostics(
     m: int | None = None,
     n: int | None = None,
     rank: int | None = None,
-    sample_sizes: Iterable[int] | None = None,
 ) -> dict[str, Path]:
     """读取 Hankel-DMD 输出，保存最小诊断结果。"""
 
@@ -186,15 +198,32 @@ def run_diagnostics(
 
     if observable_path is not None and m is not None and n is not None and rank is not None:
         x = _read_observable(Path(observable_path))
-        rec_error = reconstruction_error(x, m=m, n=n, rank=rank)
-        rec = pd.DataFrame([{"m": m, "n": n, "rank": rank, "relative_reconstruction_error": rec_error}])
+        errors = reconstruction_errors(x, m=m, n=n, rank=rank)
+        rec = pd.DataFrame(
+            [
+                {
+                    "m": m,
+                    "n": n,
+                    "rank": rank,
+                    "train_observable_count": m + n + 1,
+                    "window_rule": "rolling_train_window_predict_next_value",
+                    "prediction_count": errors["prediction_count"],
+                    "prediction_error_mean": errors["prediction_error_mean"],
+                    "prediction_error_std": errors["prediction_error_std"],
+                    "prediction_mae": errors["prediction_mae"],
+                    "prediction_rmse": errors["prediction_rmse"],
+                    "prediction_median_absolute_error": errors["prediction_median_absolute_error"],
+                    "midpoint_relative_abs_error_mean": errors["midpoint_relative_abs_error_mean"],
+                    "midpoint_relative_abs_error_median": errors["midpoint_relative_abs_error_median"],
+                    "midpoint_relative_abs_error_valid_count": errors["midpoint_relative_abs_error_valid_count"],
+                    "last_prediction_true": errors["last_prediction_true"],
+                    "last_prediction_pred": errors["last_prediction_pred"],
+                    "last_prediction_error": errors["last_prediction_error"],
+                }
+            ]
+        )
         paths["reconstruction_error"] = output_dir / "reconstruction_error.csv"
         rec.to_csv(paths["reconstruction_error"], index=False, encoding="utf-8-sig")
-
-        if sample_sizes is not None:
-            stability = sample_size_stability(x, sample_sizes=sample_sizes, m=m, n=n, rank=rank)
-            paths["sample_size_stability"] = output_dir / "sample_size_stability.csv"
-            stability.to_csv(paths["sample_size_stability"], index=False, encoding="utf-8-sig")
 
     print(f"输出目录: {output_dir}")
     for name, path in paths.items():
@@ -202,21 +231,14 @@ def run_diagnostics(
     return paths
 
 
-def _parse_sample_sizes(text: str | None) -> list[int] | None:
-    if text is None or not text.strip():
-        return None
-    return [int(item.strip()) for item in text.split(",") if item.strip()]
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="运行 single-observable Hankel-DMD 最小诊断。")
     parser.add_argument("--dmd-dir", required=True, help="Hankel-DMD 输出目录。")
     parser.add_argument("--out-dir", default=None, help="诊断结果输出目录；默认写到 dmd-dir/diagnostics。")
-    parser.add_argument("--observable-path", default=None, help="observable.csv；提供后可计算重构误差和样本长度稳定性。")
+    parser.add_argument("--observable-path", default=None, help="observable.csv；提供后可计算新增 observable 点预测误差。")
     parser.add_argument("--m", type=int, default=None)
     parser.add_argument("--n", type=int, default=None)
     parser.add_argument("--rank", type=int, default=None)
-    parser.add_argument("--sample-sizes", default=None, help="逗号分隔的样本长度，例如 80,100,120,147。")
     return parser.parse_args()
 
 
@@ -229,7 +251,6 @@ def main() -> None:
         m=args.m,
         n=args.n,
         rank=args.rank,
-        sample_sizes=_parse_sample_sizes(args.sample_sizes),
     )
 
 
