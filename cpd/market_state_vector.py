@@ -135,15 +135,23 @@ class MarketStateVector:
             if ts not in idx_to_pos:
                 continue
             pos = idx_to_pos[ts]
-            if pos > i or pos in confirmed_set:
+            change_ts = pd.Timestamp(event.get("change_time", ts))
+            if change_ts not in idx_to_pos:
+                continue
+            change_pos = idx_to_pos[change_ts]
+            dedupe_pos = change_pos if "change_time" in event else pos
+            if pos > i or dedupe_pos in confirmed_set:
                 continue
             if i - pos < self.cpd_confirm_lag:
                 continue
-            confirmed_set.add(pos)
-            confirmed_positions.append(pos)
+            confirmed_set.add(dedupe_pos)
+            if pos not in confirmed_positions:
+                confirmed_positions.append(pos)
             event_out = {
                 "position": int(pos),
                 "timestamp": ts,
+                "change_position": int(change_pos),
+                "change_time": change_ts,
                 "direction": int(event.get("direction", 0)),
                 "direction_source": str(event.get("direction_source", "unknown")),
                 "score": float(event.get("score", np.nan)),

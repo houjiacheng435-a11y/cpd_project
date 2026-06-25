@@ -105,13 +105,21 @@ class Brk:
                                               rho_theta_up=rho_theta_up, rho_theta_down=rho_theta_down)
 
     @staticmethod
-    def _event(timestamp, direction: int, source: str, score: float = np.nan) -> Dict[str, Any]:
-        return {
+    def _event(
+        timestamp,
+        direction: int,
+        source: str,
+        score: float = np.nan,
+        **metadata,
+    ) -> Dict[str, Any]:
+        event = {
             "timestamp": timestamp,
             "direction": int(np.sign(direction)) if direction != 0 else 0,
             "direction_source": source,
             "score": float(score) if np.isfinite(score) else np.nan,
         }
+        event.update(metadata)
+        return event
 
     @staticmethod
     def _infer_direction_from_windows(
@@ -443,32 +451,24 @@ class Brk:
             sigma0 = np.std(seg, ddof=1)
             t = idx + window
             consecutive = 0
-            candidate_break = None
-            candidate_direction = 0
-            candidate_score = np.nan
             while t < n:
                 y = ds.iloc[t]
                 score = abs(y - mu0) / max(sigma0, 1e-8)
                 if abs(y - mu0) > q * k * sigma0:
                     consecutive += 1
-                    if consecutive == 1:
-                        candidate_break = ds.index[t]
-                        candidate_direction = self._direction_from_value(float(y - mu0))
-                        candidate_score = score
                     if consecutive >= c_lim:
                         events.append(
                             self._event(
-                                candidate_break,
-                                candidate_direction,
+                                ds.index[t],
+                                self._direction_from_value(float(y - mu0)),
                                 "inferred_cpd_level_shift",
-                                candidate_score,
+                                score,
                             )
                         )
                         idx = t - c_lim + 1
                         break
                 else:
                     consecutive = 0
-                    candidate_break = None
                 t += 1
             else:
                 break
@@ -591,12 +591,14 @@ class Brk:
 
         hypotheses.sort(key=lambda h: h.bic)
         change_points = hypotheses[0].change_points
+        detection_time = times[-1]
         return [
             self._event(
-                cp,
+                detection_time,
                 self._infer_direction_from_windows(ds, cp, lookback=min_seg_len),
                 "inferred_cpd_segment_mean",
                 np.nan,
+                change_time=cp,
             )
             for cp in change_points
         ]

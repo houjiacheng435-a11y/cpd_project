@@ -375,20 +375,16 @@ class Brk:
             sigma0 = np.std(seg, ddof=1)
             t = idx + window
             consecutive = 0
-            candidate_break = None
             while t < n:
                 y = ds.iloc[t]
                 if abs(y - mu0) > q * k * sigma0:
                     consecutive += 1
-                    if consecutive == 1:
-                        candidate_break = ds.index[t]
                     if consecutive >= c_lim:
-                        breaks.append(candidate_break)
+                        breaks.append(ds.index[t])
                         idx = t - c_lim + 1
                         break
                 else:
                     consecutive = 0
-                    candidate_break = None
                 t += 1
             else:
                 break
@@ -495,7 +491,8 @@ class Brk:
             h.bic = calc_bic(total_rss, total_n, h.n_seg + 1)
 
         hypotheses.sort(key=lambda h: h.bic)
-        return hypotheses[0].change_points
+        change_points = hypotheses[0].change_points
+        return [times[-1] for _ in change_points]
 
     def e_detector(self, x, q: float = 0.5, vol_window=10, warmup=20, lambda_grid=(0.01, 0.02, 0.05, 0.1), clip=5.0, two_sided=True):
         values = x.values
@@ -724,7 +721,7 @@ class Brk:
         detector = WBSLepageDetector(M=M, alpha=alpha, min_seg_len=min_seg_len,
                                      precompute=True, max_len=len(ret), nsim=200)
         indices = detector.detect(series=ret.values, q=q, prune=prune)
-        return [ds.index[i + 1] for i in indices if i + 1 < len(ds)]
+        return [ds.index[-1] for i in indices if i + 1 < len(ds)]
 
 def generate_breaks(ds: pd.Series, brk: Brk) -> List[datetime.datetime]:
     if not isinstance(ds, pd.Series):
