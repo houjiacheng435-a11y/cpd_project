@@ -1,61 +1,37 @@
-# Hankel_DMD 用法说明
+# Hankel_DMD
 
-本目录现在作为 automatic123 + Hankel-DMD 实验的统一工作区。之后从头跑数据、保存中间结果、继续做 observable 和 DMD，都放在这里。
+这个目录现在只保留两部分内容：
 
-## 目录结构
+1. 当前已经保留并可运行的 `CPD -> observable -> Hankel-DMD -> diagnostics` 主流水线。
+2. 下一步打算转向的实时 DMD 状态建模思路。
+
+历史实验脚本、PyDMD 对照、HH/LL 分块实验、map 型实验和对应结果目录都已经清掉，不再作为当前工作流的一部分。
+
+## 当前保留的文件
 
 ```text
 Hankel_DMD/
-  scripts/
-    build_cpd_extrema.py          # 从原始日频 CSV 重新跑 CPD + automatic123 极值
   configs/
-    cpd_extrema_example.json      # 示例配置
-  outputs/
-    runs/
-      <run_name>/                 # 每次运行一个独立目录
-  build_extremum_observable.py    # 从 confirmed_extrema 构造 single observable
-  hankel_dmd.py                   # 对 observable 执行 Hankel-DMD 核心计算
-  diagnostics.py                  # 对 Hankel-DMD 输出做最小诊断
+    cpd_extrema_example.json
+  scripts/
+    build_cpd_extrema.py
+    download_a_share_60min_akshare.py
+    run_hankel_dmd.py
+  __init__.py
+  build_extremum_observable.py
+  hankel_dmd.py
+  diagnostics.py
+  README.md
 ```
 
-## 1. 从头跑 CPD 和极值点
+## 当前主流水线
+
+### 1. 先跑 CPD 和极值确认
 
 入口脚本：
 
 ```text
 Hankel_DMD/scripts/build_cpd_extrema.py
-```
-
-如果需要先下载 A 股 60 分钟数据，入口脚本：
-
-```text
-Hankel_DMD/scripts/download_a_share_60min_akshare.py
-```
-
-示例命令：
-
-```powershell
-python Hankel_DMD/scripts/download_a_share_60min_akshare.py `
-  --source sina `
-  --symbols 000001,000002,000006,000008,000009 `
-  --start "2020-01-01 09:30:00" `
-  --end "2026-05-29 15:00:00" `
-  --out-dir data/a_share_60min_akshare
-```
-
-输出：
-
-| 文件 | 用途 |
-|---|---|
-| `data/a_share_60min_akshare/symbols/<symbol>.csv` | 单只股票 60 分钟 OHLC 数据 |
-
-说明：`source=sina` 通常返回最近约 1970 根 60 分钟 K 线；`source=eastmoney` 在当前接口下通常只返回更短的近期窗口。
-下载完成后，脚本只在终端打印下载状态和共同小时 bar 日历下的完整性检查，不额外生成汇总 CSV。
-
-示例命令：
-
-```powershell
-python Hankel_DMD/scripts/build_cpd_extrema.py --config Hankel_DMD/configs/cpd_extrema_example.json
 ```
 
 示例配置：
@@ -64,42 +40,38 @@ python Hankel_DMD/scripts/build_cpd_extrema.py --config Hankel_DMD/configs/cpd_e
 Hankel_DMD/configs/cpd_extrema_example.json
 ```
 
-配置中的 `input_csv` 必须指向一个具体 CSV 文件，例如：
+示例命令：
+
+```powershell
+python Hankel_DMD/scripts/build_cpd_extrema.py --config Hankel_DMD/configs/cpd_extrema_example.json
+```
+
+配置里的 `input_csv` 需要指向具体价格文件，例如：
 
 ```json
 "input_csv": "data/a_share_1d_akshare/symbols/000001.csv"
 ```
 
-默认输出目录：
+默认输出目录形如：
 
 ```text
 Hankel_DMD/outputs/runs/example_000001_cpd_extrema/
 ```
 
-该目录里会生成：
+该目录的基础输出是：
 
-| 文件 | 用途 |
-|---|---|
-| `config.json` | 本次运行使用的方法和参数 |
-| `cpd_diagnostics.csv` | 日频级别的 CPD/Direction/Status/极值确认诊断 |
-| `confirmed_extrema.csv` | 极值事件表，后续 Hankel-DMD 主要读取这个 |
+- `config.json`
+- `cpd_diagnostics.csv`
+- `confirmed_extrema.csv`
 
-`confirmed_extrema.csv` 的主要列：
+其中：
 
-| 列名 | 含义 |
-|---|---|
-| `event_id` | 极值事件 ID |
-| `stock_id` | 股票代码 |
-| `extreme_type` | `high` 或 `low` |
-| `extreme_idx` | 极值所在 bar 位置 |
-| `extreme_date` | 极值实际发生日期 |
-| `extreme_price` | 极值价格，口径由配置里的 `log_price` 决定 |
-| `confirmed_idx` | 极值被确认时的 bar 位置 |
-| `confirmed_date` | 极值被确认日期 |
+- `cpd_diagnostics.csv` 是逐 bar 的 CPD 诊断表；
+- `confirmed_extrema.csv` 是后续 observable 和 DMD 的主要输入。
 
-## 2. 从极值点构造 observable
+### 2. 从 confirmed extrema 构造 observable
 
-入口函数：
+核心函数：
 
 ```python
 from Hankel_DMD import build_extremum_observable
@@ -122,40 +94,25 @@ observable = build_extremum_observable(
     price_mode="log",
 )
 
-out_path = run_dir / "observable.csv"
-observable.to_csv(out_path, index=False, encoding="utf-8-sig")
+observable.to_csv(run_dir / "observable.csv", index=False, encoding="utf-8-sig")
 ```
 
 输出：
 
 ```text
-Hankel_DMD/outputs/runs/example_000001_cpd_extrema/observable.csv
+Hankel_DMD/outputs/runs/<run_name>/observable.csv
 ```
 
-`observable.csv` 只包含：
+当前 `observable.csv` 的关键列是：
 
-| 列名 | 含义 |
-|---|---|
-| `event_id` | 极值事件 ID |
-| `date` | 极值事件日期 |
-| `bar_index` | 极值事件在日频价格序列中的位置 |
-| `extreme_type` | `high` 或 `low` |
-| `extreme_price` | 极值价格 |
-| `observable` | 给 Hankel-DMD 使用的一维序列 |
+- `event_id`
+- `date`
+- `bar_index`
+- `extreme_type`
+- `extreme_price`
+- `observable`
 
-## 结果查找规则
-
-以后不要再去 `market_state_vector_builder/outputs/` 里找新结果。
-
-新的结果统一看这里：
-
-```text
-Hankel_DMD/outputs/runs/<run_name>/
-```
-
-每次重新跑数据都新建一个 `<run_name>`，不要覆盖旧结果。
-
-## 3. 执行 Hankel-DMD 并保存结果
+### 3. 对 observable 跑 Hankel-DMD
 
 入口脚本：
 
@@ -163,20 +120,7 @@ Hankel_DMD/outputs/runs/<run_name>/
 Hankel_DMD/scripts/run_hankel_dmd.py
 ```
 
-输入：
-
-- 一维 `observable` 序列。
-- `m`：Hankel 矩阵行数。
-- `n`：Hankel 矩阵列数减一，实际列数为 `n + 1`。
-- `rank`：SVD 截断 rank。
-
-要求：
-
-```text
-m + n + 1 <= len(observable)
-```
-
-示例：
+示例命令：
 
 ```powershell
 python Hankel_DMD/scripts/run_hankel_dmd.py `
@@ -186,43 +130,64 @@ python Hankel_DMD/scripts/run_hankel_dmd.py `
   --rank 5
 ```
 
+参数含义：
+
+- `m`：Hankel 矩阵行数；
+- `n`：Hankel 矩阵列数减一，实际列数是 `n + 1`；
+- `rank`：SVD 截断秩。
+
+约束：
+
+```text
+m + n + 1 <= len(observable)
+```
+
+当前实现的一个重要细节：
+
+- 不是拿整条 observable 一次性做全样本 Hankel；
+- 而是只取 **最后 `m + n + 1` 个点**；
+- 也就是 `run_hankel_dmd.py` 当前固定使用尾部窗口：
+
+```text
+used_window = tail_m_plus_n_plus_1
+```
+
 默认输出目录：
+
+```text
+Hankel_DMD/outputs/runs/<run_name>/hankel_dmd_m{m}_n{n}_r{rank}/
+```
+
+例如：
 
 ```text
 Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5/
 ```
 
-输出目录会自动带上参数名，格式为：
+输出文件包括：
 
-```text
-hankel_dmd_m{m}_n{n}_r{rank}/
-```
+- `config.json`
+- `eigenvalues.csv`
+- `singular_values.csv`
+- `modes_real.csv`
+- `modes_imag.csv`
 
-例如 `--m 10 --n 80 --rank 10` 会写到：
-
-```text
-Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m10_n80_r10/
-```
-
-该目录会生成：
-
-| 文件 | 含义 |
-|---|---|
-| `config.json` | 本次 Hankel-DMD 参数 |
-| `eigenvalues.csv` | DMD 特征值，包含实部、虚部、模长和相位 |
-| `singular_values.csv` | Hankel 矩阵 `X` 的奇异值 |
-| `modes_real.csv` | projected modes 的实部 |
-| `modes_imag.csv` | projected modes 的虚部 |
-
-如果需要同时保存 `X`、`Y` 和 `A_hat`，添加：
+如果加上：
 
 ```powershell
 --save-matrices
 ```
 
-## 4. 运行最小诊断
+还会额外保存：
 
-入口脚本：
+- `X.csv`
+- `Y.csv`
+- `A_hat_real.csv`
+- `A_hat_imag.csv`
+
+### 4. 跑最小诊断
+
+入口：
 
 ```text
 Hankel_DMD/diagnostics.py
@@ -235,7 +200,7 @@ python Hankel_DMD/diagnostics.py `
   --dmd-dir Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5
 ```
 
-如果还要计算滚动窗口外下一个 observable 点的预测误差，需要提供 `observable.csv` 和本次 DMD 参数：
+如果还要计算基于当前参数的滚动窗口外下一点预测误差，需要补充：
 
 ```powershell
 python Hankel_DMD/diagnostics.py `
@@ -249,51 +214,345 @@ python Hankel_DMD/diagnostics.py `
 默认输出目录：
 
 ```text
-Hankel_DMD/outputs/runs/example_000001_cpd_extrema/hankel_dmd_m20_n80_r5/diagnostics/
+Hankel_DMD/outputs/runs/<run_name>/hankel_dmd_m{m}_n{n}_r{rank}/diagnostics/
 ```
 
-可能生成：
+输出文件包括：
 
-| 文件 | 含义 |
-|---|---|
-| `singular_value_diagnostics.csv` | 奇异值、归一化奇异值、能量占比和累计能量 |
-| `eigenvalue_diagnostics.csv` | 特征值实部、虚部、模长和相位角 |
-| `reconstruction_error.csv` | 窗口外下一个 observable 点的 MAE、RMSE、中位绝对误差、midpoint 相对绝对误差和最后一个预测误差 |
+- `singular_value_diagnostics.csv`
+- `eigenvalue_diagnostics.csv`
+- `reconstruction_error.csv`
 
-## 5. PyDMD HankelDMD 对照
+## 当前结果目录约定
 
-入口脚本：
+现在只保留基础 run 目录，派生实验结果不再保留。
+
+统一查看：
 
 ```text
-Hankel_DMD/scripts/run_pydmd_hankel_grid.py
+Hankel_DMD/outputs/runs/<run_name>/
 ```
 
-如果本地没有 PyDMD，先安装：
+目前目录里通常只有：
 
-```powershell
-python -m pip install pydmd
-```
+- `config.json`
+- `cpd_diagnostics.csv`
+- `confirmed_extrema.csv`
+- `observable.csv`
 
-示例命令：
+以及你手动再跑出来的：
 
-```powershell
-python Hankel_DMD/scripts/run_pydmd_hankel_grid.py `
-  --run-dir Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema `
-  --rank 5 `
-  --local-grid-path Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema/parameter_grid_tail_r5/grid_summary.csv
-```
+- `hankel_dmd_m{m}_n{n}_r{rank}/`
 
-默认输出目录：
+## 当前实现和下一步方向要分开看
+
+这个目录里现在真正已经实现并保留的，是：
+
+- extremum observable 的构造；
+- batch 式 Hankel-DMD；
+- 最小诊断。
+
+下面这部分不是当前已经落地的主实现，而是下一步准备推进的 **实时 DMD 状态建模设计**。
+
+---
+
+## 下一步 DMD 方向：实时状态 + DMDc
+
+### 目标
+
+在新的设计里，目标不再是“只对极值事件序列做一次性 DMD 分解”，而是构造一个：
+
+- 以当前价格为基础；
+- 带最近交替极值记忆；
+- 可按 bar 实时更新；
+- 仍然以 DMD 为核心的低维状态。
+
+当前约束是：
+
+- 必须用 DMD；
+- 先不建模极值之间的完整路径；
+- 只用：
+  - 当前价格；
+  - 最近 10 个交替确认极值。
+
+### 为什么不继续沿用 extremum-only Hankel-DMD
+
+原来的 event-time Hankel-DMD 路线有两个结构问题：
+
+1. 只有确认出新极值时才更新，不是天然的 bar 级实时模型。
+2. 如果把 high 和 low 混在一起，主结构很容易被“高低交替”本身占据，而不是更有意义的市场结构。
+
+所以如果要做实时低维状态，更合理的是：
+
+- 回到 bar-time；
+- 让极值只承担“结构记忆”的角色。
+
+### 建议的方法
+
+建议使用：
+
+**bar-time DMD with control (DMDc)**。
+
+模型形式：
 
 ```text
-Hankel_DMD/outputs/runs/example_spx_1d_cpd_extrema/pydmd_hankel_grid_r5/
+x_{t+1} ~= A x_t + B u_t
 ```
 
-可能生成：
+含义：
 
-| 文件 | 含义 |
-|---|---|
-| `pydmd_grid_summary.csv` | PyDMD HankelDMD 参数网格预测误差 |
-| `pydmd_grid_leading_eigenvalues.csv` | PyDMD HankelDMD leading eigenvalues |
-| `comparison_with_local.csv` | PyDMD 与本项目实现的误差指标对比 |
-| `eigenvalue_comparison_with_local.csv` | PyDMD 与本项目实现的 leading eigenvalues 对比 |
+- `x_t`：当前结构状态；
+- `u_t`：下一步是否发生极值结构切换的事件输入；
+- `A`：在没有结构切换时，状态如何自行演化；
+- `B`：一旦确认出新极值，状态如何被改写。
+
+相比 plain DMD，这样做的理由是：
+
+状态更新其实有两种机制：
+
+1. 普通 bar-to-bar 价格推进；
+2. 新极值确认后，最近 swing 记忆整体右移和重写。
+
+如果不用 `u_t`，这两种机制会被硬压到同一个线性算子里。
+
+### 状态 `x_t` 的定义
+
+设：
+
+- `P_t`：当前 bar 价格；
+- `E_k`：最近一个确认极值；
+- `E_{k-1}, ..., E_{k-9}`：之前 9 个交替确认极值。
+
+定义：
+
+```text
+x_t = [
+  log(P_t) - log(E_k),
+  log(E_k) - log(E_{k-1}),
+  log(E_{k-1}) - log(E_{k-2}),
+  ...,
+  log(E_{k-8}) - log(E_{k-9})
+]^T
+```
+
+这是一个 10 维状态：
+
+1. 第一维：当前价格相对最近确认极值的偏移；
+2. 后面 9 维：最近 9 段已完成的交替 swing 幅度。
+
+这套定义的好处是很直接：
+
+- 第一维回答“当前价格离最近结构锚点有多远”；
+- 后面几维回答“最近这套 swing scaffold 长什么样”。
+
+### 控制输入 `u_t` 的定义
+
+最简单的一组输入是：
+
+```text
+u_t = [
+  1(new extremum is confirmed at t+1),
+  1(new high is confirmed at t+1)
+]^T
+```
+
+典型情况：
+
+- 没有新极值：
+
+```text
+u_t = [0, 0]^T
+```
+
+- 新 high 被确认：
+
+```text
+u_t = [1, 1]^T
+```
+
+- 新 low 被确认：
+
+```text
+u_t = [1, 0]^T
+```
+
+### DMDc 是怎么学的
+
+收集一串三元组：
+
+```text
+(x_1, u_1, x_2), (x_2, u_2, x_3), ..., (x_{T-1}, u_{T-1}, x_T)
+```
+
+构造：
+
+```text
+X  = [x_1, x_2, ..., x_{T-1}]
+Xp = [x_2, x_3, ..., x_T]
+U  = [u_1, u_2, ..., u_{T-1}]
+```
+
+求解：
+
+```text
+Xp ~= A X + B U
+```
+
+也就是：
+
+```text
+Xp ~= [A  B] [X; U]
+```
+
+最小二乘估计为：
+
+```text
+[A  B] = Xp [X; U]^dagger
+```
+
+解释：
+
+- `A` 学“结构不变时，状态自己怎么走”；
+- `B` 学“新 extremum 事件会把状态怎么重写”。
+
+### 一个最小例子
+
+假设最近三个交替确认极值是：
+
+- `E_{k-2} = 95`
+- `E_{k-1} = 105`
+- `E_k = 98`
+
+当前价格：
+
+- `P_t = 101`
+
+缩成 3 维记忆时：
+
+```text
+x_t = [
+  log(101 / 98),
+  log(98 / 105),
+  log(105 / 95)
+]^T
+```
+
+如果下一根 bar 到 `102`，但没有新极值确认：
+
+```text
+u_t = [0, 0]^T
+```
+
+那么主要变化只在第一维。
+
+如果下一步确认了一个新 high，例如 `106`：
+
+```text
+u_t = [1, 1]^T
+```
+
+那整个状态都会改写，因为：
+
+- 当前偏移要相对新的锚点重算；
+- 最近 swing 幅度记忆会整体右移；
+- 插入一段新的已完成 swing。
+
+这就是为什么需要 `B`。
+
+### 两种“窗口”要分开
+
+这里有两个不同概念的窗口。
+
+#### 1. 结构记忆窗口
+
+这是 `x_t` 里保留多少个极值。
+
+当前建议：
+
+- 保留最近 10 个交替确认极值。
+
+这不是时间窗口。
+
+#### 2. 模型拟合窗口
+
+这是每次估计局部 DMDc 模型时，用多少根最近的 bar。
+
+建议起点：
+
+- 先用最近 `180` 根 bar；
+- 但要求这段里至少有大约 `10` 次极值切换；
+- 如果不足，可以扩到 `250` 根 bar 左右。
+
+理由：
+
+- 太短：事件太少，`B` 不稳；
+- 太长：不同 regime 被平均。
+
+### 这种模型能支持什么结论
+
+这套设计更适合：
+
+- 状态表示；
+- 局部结构分析；
+- 滚动跟踪。
+
+它可以回答：
+
+1. 当前价格加最近交替 swing 记忆，是否存在明显低维结构；
+2. 当前时刻在 DMD 模态坐标下处在什么位置；
+3. 最近 swing 结构是偏持续、偏振荡，还是偏快速衰减；
+4. 如果做滚动重估，当前局部结构是否在漂移。
+
+### 它明确不回答什么
+
+因为当前设计里故意不放“极值之间的完整路径”，所以它不适合回答：
+
+1. 当前腿内部到底平滑还是粗糙；
+2. intraleg 波动聚集；
+3. 两个 extremum 之间的详细形状；
+4. 下一次 extremum 的精确发生时点。
+
+因此它应该被理解为：
+
+**swing-structure state model**，而不是完整路径模型。
+
+### 一个实际输出
+
+如果拿到 DMD 模态矩阵 `Phi`，一个自然的低维状态输出是：
+
+```text
+a_t = Phi^dagger x_t
+```
+
+这个 `a_t` 才是候选的实时低维向量。它满足：
+
+- 每根 bar 更新一次；
+- 仍然 anchored 在“当前价格 + 最近 swing 记忆”上；
+- 保持在 DMD 框架内部。
+
+## 当前推荐结论
+
+在现阶段，这个目录里的建议路线分成两条：
+
+### 已实现并可直接使用
+
+1. `build_cpd_extrema.py`
+2. `build_extremum_observable.py`
+3. `run_hankel_dmd.py`
+4. `diagnostics.py`
+
+这条线适合继续做：
+
+- extremum observable 的离线 Hankel-DMD；
+- 奇异值、特征值和最小误差诊断。
+
+### 下一步准备实现
+
+1. 用当前价格和最近 10 个交替 extremum 构造 `x_t`；
+2. 用 extremum 确认事件构造 `u_t`；
+3. 做 rolling bar-time DMDc；
+4. 输出实时低维状态。
+
+一句话概括：
+
+**当前保留实现是 batch Hankel-DMD；下一步设计方向是 bar-time DMDc 状态模型。**

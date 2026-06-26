@@ -94,6 +94,33 @@ class FuncEvtCPD:
         return cls._times(dif, positions)
 
     @classmethod
+    def page_hinkley(cls, dif: pd.Series, vol: pd.Series | float, *, b2b: int = 1, minimum_instances: int = 10, delta_ph: float = 0.0, alpha: float = 0.9999) -> list[TYPE_DT]:
+        dif, vol_arr = cls._prep(dif, vol)
+        values = dif.to_numpy(dtype=float)
+        positions: list[int] = []
+        mean = 0.0
+        sigma_p = 0.0
+        sigma_n = 0.0
+        consecutive = 0
+        for i, x in enumerate(values):
+            n = i + 1
+            mean = mean + (x - mean) / n
+            sigma_p = max(0.0, alpha * sigma_p + (x - mean - delta_ph))
+            sigma_n = max(0.0, alpha * sigma_n + (mean - x - delta_ph))
+            if n < minimum_instances:
+                continue
+            if max(sigma_p, sigma_n) > vol_arr[i]:
+                consecutive += 1
+                if consecutive >= b2b:
+                    positions.append(i)
+                    sigma_p = 0.0
+                    sigma_n = 0.0
+                    consecutive = 0
+            else:
+                consecutive = 0
+        return cls._times(dif, positions)
+
+    @classmethod
     def cusum_ls(cls, dif: pd.Series, vol: pd.Series | float, *, b2b: int = 1, warmup: int = 30, drift: float = 0.0) -> list[TYPE_DT]:
         dif, vol_arr = cls._prep(dif, vol)
         values = dif.to_numpy(dtype=float)
@@ -101,8 +128,6 @@ class FuncEvtCPD:
         i = int(warmup)
         while i < len(values):
             mu = float(np.mean(values[max(0, i - warmup):i]))
-            var = float(np.var(values[max(0, i - warmup):i]))
-            n = max(1, min(warmup, i))
             g_pos = 0.0
             g_neg = 0.0
             consecutive = 0
@@ -119,10 +144,7 @@ class FuncEvtCPD:
                         break
                 else:
                     consecutive = 0
-                n += 1
-                delta = x - mu
-                mu += delta / n
-                var = ((n - 1) * var + delta * (x - mu)) / n
+                mu = float(np.mean(values[max(0, i - warmup + 1):i + 1]))
                 i += 1
             else:
                 break
@@ -136,8 +158,6 @@ class FuncEvtCPD:
         i = int(warmup)
         while i < len(values):
             mu = float(np.mean(values[max(0, i - warmup):i]))
-            var = float(np.var(values[max(0, i - warmup):i]))
-            n = max(1, min(warmup, i))
             g = 0.0
             consecutive = 0
             while i < len(values):
@@ -152,10 +172,7 @@ class FuncEvtCPD:
                         break
                 else:
                     consecutive = 0
-                n += 1
-                delta = x - mu
-                mu += delta / n
-                var = ((n - 1) * var + delta * (x - mu)) / n
+                mu = float(np.mean(values[max(0, i - warmup + 1):i + 1]))
                 i += 1
             else:
                 break
@@ -169,8 +186,6 @@ class FuncEvtCPD:
         i = int(warmup)
         while i < len(values):
             mu = float(np.mean(values[max(0, i - warmup):i]))
-            var = float(np.var(values[max(0, i - warmup):i]))
-            n = max(1, min(warmup, i))
             g = 0.0
             consecutive = 0
             while i < len(values):
@@ -184,10 +199,7 @@ class FuncEvtCPD:
                         break
                 else:
                     consecutive = 0
-                n += 1
-                delta = x - mu
-                mu += delta / n
-                var = ((n - 1) * var + delta * (x - mu)) / n
+                mu = float(np.mean(values[max(0, i - warmup + 1):i + 1]))
                 i += 1
             else:
                 break
@@ -386,7 +398,7 @@ class FuncEvtCPD:
                 continue
             mean_win = sum_win / std_window
             var_win = (sum2_win - std_window * mean_win * mean_win) / max(std_window - 1, 1)
-            x = x_raw / np.sqrt(max(var_win, 1e-12))
+            x = x_raw / np.sqrt(var_win)
             max_c = 0.0
             for d in dirs:
                 m_dir, v_dir = d
@@ -437,10 +449,56 @@ class FuncEvtCPD:
         return cls._times(dif, positions)
 
     @classmethod
+    def aff(cls, dif: pd.Series, vol: pd.Series | float, *, b2b: int = 1, warmup: int = 50, step: float = 0.01, lam_init: float = 0.9) -> list[TYPE_DT]:
+        dif, vol_arr = cls._prep(dif, vol)
+        values = dif.to_numpy(dtype=float)
+        positions: list[int] = []
+        i = int(warmup)
+        while i < len(values):
+            start = max(0, i - warmup)
+            baseline = float(np.mean(values[start:i]))
+            var_scale = float(np.var(values[start:i]))
+            lam = float(lam_init)
+            m = 0.0
+            w = 0.0
+            dm = 0.0
+            dw = 0.0
+            for x0 in values[start:i]:
+                dm = lam * dm + m
+                dw = lam * dw + w
+                m = lam * m + x0
+                w = lam * w + 1.0
+            consecutive = 0
+            while i < len(values):
+                x = values[i]
+                mean_prev = m / w if w > 0 else baseline
+                dmean = (dm * w - m * dw) / (w * w) if w > 0 else 0.0
+                grad = 2.0 * (mean_prev - x) * dmean
+                lam = float(lam - step * grad / var_scale)
+                dm = lam * dm + m
+                dw = lam * dw + w
+                m = lam * m + x
+                w = lam * w + 1.0
+                aff_mean = m / w
+                if abs(aff_mean - baseline) > vol_arr[i]:
+                    consecutive += 1
+                    if consecutive >= b2b:
+                        positions.append(i)
+                        i += 1
+                        break
+                else:
+                    consecutive = 0
+                i += 1
+            else:
+                break
+        return cls._times(dif, positions)
+
+    @classmethod
     def methods(cls) -> Dict[str, Callable]:
         return {
             "swt": cls.swt,
             "cum": cls.cum,
+            "page_hinkley": cls.page_hinkley,
             "cusum_ls": cls.cusum_ls,
             "sprt": cls.sprt,
             "gma": cls.gma,
@@ -449,6 +507,7 @@ class FuncEvtCPD:
             "e_detector": cls.e_detector,
             "ssr_cusum": cls.ssr_cusum,
             "adaptive_cusum": cls.adaptive_cusum,
+            "aff": cls.aff,
         }
 
     @classmethod

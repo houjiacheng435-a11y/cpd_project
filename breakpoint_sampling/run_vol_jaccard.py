@@ -27,6 +27,7 @@ DEFAULT_METHODS = [
     "e_detector",
     "ssr_cusum",
     "adaptive_cusum",
+    "aff",
 ]
 
 
@@ -40,6 +41,7 @@ METHOD_KWARGS = {
     "e_detector": {"std_window": 30, "warmup": 50},
     "ssr_cusum": {"zeta": 0.25},
     "adaptive_cusum": {"std_window": 30},
+    "aff": {"warmup": 50, "step": 0.01, "lam_init": 0.9},
 }
 
 
